@@ -2,6 +2,13 @@ package jp.classmethod.aws.jobs
 
 import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.auth.BasicAWSCredentials
+import com.amazonaws.auth.BasicSessionCredentials
+import com.amazonaws.regions.Region
+import com.amazonaws.regions.Regions
+import com.amazonaws.services.ec2.AmazonEC2Client
+import com.amazonaws.services.securitytoken.AWSSecurityTokenServiceClient
+import com.amazonaws.services.securitytoken.model.AssumeRoleRequest
+import com.amazonaws.services.securitytoken.model.Credentials
 import groovy.transform.Canonical
 
 /**
@@ -15,6 +22,7 @@ class AWSJobsConfig {
     def String service
     def String function
     def boolean debug = false
+    def String roleArn
     def String accessKey
     def String secretKey
     def String region = "ap-northeast-1"
@@ -22,11 +30,33 @@ class AWSJobsConfig {
     def int retryCount = 3
 
     def AWSCredentials newAWSCredentials() {
-        println accessKey
-        println secretKey
-        if (accessKey == null || secretKey == null) return null
-        new BasicAWSCredentials(accessKey, secretKey)
+        if (useAccessKey()) {
+            new BasicAWSCredentials(accessKey, secretKey)
+        } else if (useAssumeRole()) {
+            newAssumeRoleCredentials()
+        } else {
+            null
+        }
     }
+
+    private useAccessKey() {
+        accessKey != null && secretKey != null
+    }
+
+    private useAssumeRole() {
+        roleArn != null
+    }
+
+    private AWSCredentials newAssumeRoleCredentials() {
+        def client = Region.getRegion(Regions.fromName(region)).createClient(AWSSecurityTokenServiceClient, null, null)
+        def req = new AssumeRoleRequest()
+            .withRoleArn(roleArn)
+            .withDurationSeconds(3600)
+            .withRoleSessionName("job.classmethod.net")
+        def res = client.assumeRole(req)
+        new BasicSessionCredentials(res.getCredentials().accessKeyId, res.getCredentials().secretAccessKey, res.getCredentials().sessionToken)
+    }
+
 
     def hasParam(String key) {
         this.params.containsKey(key)
@@ -48,6 +78,9 @@ class AWSJobsConfig {
                 switch (args[i]) {
                     case '-debug':
                         AWSJobsConfig.instance.debug = true
+                        break
+                    case '--role_arn':
+                        AWSJobsConfig.instance.roleArn = args[++i]
                         break
                     case '--aws_access_key_id':
                         AWSJobsConfig.instance.accessKey = args[++i]
