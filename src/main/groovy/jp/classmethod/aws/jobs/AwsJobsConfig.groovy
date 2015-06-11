@@ -66,6 +66,10 @@ class AWSJobsConfig {
         this.params.get(key)
     }
 
+    def getIntParam(String key) {
+        Integer.parseInt(this.params.get(key))
+    }
+
     static AWSJobsConfig get() {
         AWSJobsConfig.instance
     }
